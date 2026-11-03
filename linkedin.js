@@ -40,7 +40,7 @@
       ensureMounted(); // modal is open: make sure it's still on screen
       return;
     }
-    send({ type: 'liClick' }).then((res) => {
+    send({ type: 'liClick', top: isTop }).then((res) => {
       if (isTop && res && res.showModal) showModal(res.clicks);
     });
   }

@@ -60,7 +60,7 @@ const handlers = {
   },
 
   // linkedin.js reports every real click on the page
-  async liClick(_msg, sender) {
+  async liClick(msg, sender) {
     const daily = await getDaily();
     daily.linkedinClicks += 1;
     await chrome.storage.local.set({ daily });
@@ -70,10 +70,13 @@ const handlers = {
     await chrome.storage.session.set({ li });
 
     const showModal = li.clicks >= li.nextAt;
-    // Click came from an embedded frame: show the modal in the tab's top frame.
-    if (showModal && sender.tab && sender.frameId) {
+    // Click came from an embedded frame: ask the tab's top frame to show the modal.
+    // The frame says itself whether it's on top. Chrome's frameId can't be trusted for
+    // this: a page Chrome pre-loaded (e.g. a URL typed in the address bar) keeps a
+    // non-zero frameId even after it becomes the visible page.
+    if (showModal && !msg.top && sender.tab) {
       chrome.tabs
-        .sendMessage(sender.tab.id, { type: 'kfShowModal', clicks: li.clicks }, { frameId: 0 })
+        .sendMessage(sender.tab.id, { type: 'kfShowModal', clicks: li.clicks })
         .catch(() => {});
       return { clicks: li.clicks, showModal: false };
     }
