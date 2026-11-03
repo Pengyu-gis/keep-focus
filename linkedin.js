@@ -1,15 +1,24 @@
 // Keep Focus — LinkedIn click counter + reminder modal
+// Runs in every LinkedIn frame. Sub-frames only count clicks; the top frame shows the modal.
 (() => {
-  if (window.__keepFocusLoaded) return;
-  window.__keepFocusLoaded = true;
+  const alive = () => {
+    try { return !!(chrome.runtime && chrome.runtime.id); } catch { return false; }
+  };
+  // Skip if a working copy is already running here. If the old copy belongs to a
+  // reloaded (dead) extension, run anyway so the page is covered again.
+  if (window.__keepFocus && window.__keepFocus.alive()) return;
+  window.__keepFocus = { alive };
 
-  let host = null; // shadow host element while the modal is open
+  const isTop = window === window.top;
+  let host = null;      // shadow host element while the modal is open
+  let observer = null;  // puts the modal back if the page removes it
 
   function send(msg) {
     return new Promise((resolve) => {
+      if (!alive()) return resolve(null);
       try {
         chrome.runtime.sendMessage(msg, (res) => {
-          void chrome.runtime.lastError; // extension reloaded, etc.
+          void chrome.runtime.lastError;
           resolve(res || null);
         });
       } catch {
@@ -18,28 +27,63 @@
     });
   }
 
-  // Listen on window in the capture phase, registered at document_start,
-  // so LinkedIn's own handlers can't swallow the click before we see it.
-  window.addEventListener(
-    'click',
-    async (e) => {
-      if (!e.isTrusted) return; // ignore scripted clicks
-      if (host) return;         // modal is open: its own buttons handle clicks
-      const res = await send({ type: 'liClick' });
-      if (res && res.showModal && !host) showModal(res.clicks);
-    },
-    true
-  );
+  // ---------- click counting ----------
+
+  function onClick(e) {
+    if (!alive()) {
+      window.removeEventListener('click', onClick, true);
+      window.removeEventListener('auxclick', onClick, true);
+      return;
+    }
+    if (!e.isTrusted) return;
+    if (host) {
+      ensureMounted(); // modal is open: make sure it's still on screen
+      return;
+    }
+    send({ type: 'liClick' }).then((res) => {
+      if (isTop && res && res.showModal) showModal(res.clicks);
+    });
+  }
+
+  // Window + capture phase + document_start = we see the click before LinkedIn can stop it.
+  window.addEventListener('click', onClick, true);
+  window.addEventListener('auxclick', onClick, true); // middle-click / open in new tab
+
+  if (isTop) {
+    // A click inside an embedded frame can trigger the modal here.
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.type === 'kfShowModal') showModal(msg.clicks);
+    });
+
+    // Already over the limit? Show the reminder as soon as the page opens.
+    send({ type: 'liStatus' }).then((res) => {
+      if (res && res.overLimit) {
+        const show = () => showModal(res.clicks);
+        if (document.documentElement) show();
+        else document.addEventListener('DOMContentLoaded', show, { once: true });
+      }
+    });
+  }
+
+  // ---------- modal ----------
+
+  function ensureMounted() {
+    if (host && !host.isConnected && document.documentElement) {
+      document.documentElement.appendChild(host);
+    }
+  }
 
   function showModal(clicks) {
+    if (host) { ensureMounted(); return; }
+
     host = document.createElement('div');
     host.id = 'keep-focus-root';
-    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;';
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:block;';
     const root = host.attachShadow({ mode: 'closed' });
 
     root.innerHTML = `
       <style>${CSS}</style>
-      <div class="backdrop" part="backdrop">
+      <div class="backdrop">
         <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="kf-title" aria-describedby="kf-body">
           <div class="pulse"><span></span></div>
           <p class="eyebrow">Keep Focus</p>
@@ -53,9 +97,13 @@
       </div>
     `;
 
+    // Attach to <html>, not <body>: LinkedIn re-renders <body> content.
+    document.documentElement.appendChild(host);
+    observer = new MutationObserver(ensureMounted);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+
     const prevOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = 'hidden';
-    (document.body || document.documentElement).appendChild(host);
 
     const closeBtn = root.querySelector('[data-action="close"]');
     const snoozeBtn = root.querySelector('[data-action="snooze"]');
@@ -65,27 +113,23 @@
     root.addEventListener('keydown', (e) => {
       if (e.key !== 'Tab') return;
       e.preventDefault();
-      const next = root.activeElement === closeBtn ? snoozeBtn : closeBtn;
-      next.focus();
+      (root.activeElement === closeBtn ? snoozeBtn : closeBtn).focus();
     });
 
-    closeBtn.addEventListener('click', () => {
-      send({ type: 'closeTab' });
-    });
+    closeBtn.addEventListener('click', () => send({ type: 'closeTab' }));
 
     snoozeBtn.addEventListener('click', async () => {
       await send({ type: 'liSnooze' });
+      if (observer) { observer.disconnect(); observer = null; }
       const backdrop = root.querySelector('.backdrop');
       backdrop.classList.add('leaving');
-      backdrop.addEventListener(
-        'animationend',
-        () => {
-          host.remove();
-          host = null;
-          document.documentElement.style.overflow = prevOverflow;
-        },
-        { once: true }
-      );
+      const finish = () => {
+        if (host) host.remove();
+        host = null;
+        document.documentElement.style.overflow = prevOverflow;
+      };
+      backdrop.addEventListener('animationend', finish, { once: true });
+      setTimeout(finish, 400); // in case animations are disabled
     });
   }
 

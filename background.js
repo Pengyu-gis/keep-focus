@@ -60,7 +60,7 @@ const handlers = {
   },
 
   // linkedin.js reports every real click on the page
-  async liClick() {
+  async liClick(_msg, sender) {
     const daily = await getDaily();
     daily.linkedinClicks += 1;
     await chrome.storage.local.set({ daily });
@@ -69,7 +69,21 @@ const handlers = {
     li.clicks += 1;
     await chrome.storage.session.set({ li });
 
-    return { clicks: li.clicks, showModal: li.clicks >= li.nextAt };
+    const showModal = li.clicks >= li.nextAt;
+    // Click came from an embedded frame: show the modal in the tab's top frame.
+    if (showModal && sender.tab && sender.frameId) {
+      chrome.tabs
+        .sendMessage(sender.tab.id, { type: 'kfShowModal', clicks: li.clicks }, { frameId: 0 })
+        .catch(() => {});
+      return { clicks: li.clicks, showModal: false };
+    }
+    return { clicks: li.clicks, showModal };
+  },
+
+  // A LinkedIn page just opened: is the user already over the limit?
+  async liStatus() {
+    const li = await getLinkedInSession();
+    return { clicks: li.clicks, overLimit: li.clicks >= li.nextAt };
   },
 
   // "I Need 1 More Minute" -> quiet until 3 more clicks
@@ -142,7 +156,7 @@ async function sweepOpenTabs() {
   const linkedin = await chrome.tabs.query({ url: LINKEDIN_PATTERNS });
   for (const tab of linkedin) {
     chrome.scripting
-      .executeScript({ target: { tabId: tab.id }, files: ['linkedin.js'] })
+      .executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['linkedin.js'] })
       .catch(() => {});
   }
 }

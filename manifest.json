@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Keep Focus",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Blocks Instagram and X, and nudges you off LinkedIn after a few clicks.",
   "permissions": ["declarativeNetRequest", "storage", "alarms", "scripting"],
   "host_permissions": [
@@ -27,7 +27,9 @@
     {
       "matches": ["*://*.linkedin.com/*"],
       "js": ["linkedin.js"],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_origin_as_fallback": true
     }
   ],
   "web_accessible_resources": [
