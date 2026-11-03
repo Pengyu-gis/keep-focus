@@ -55,14 +55,18 @@
       if (msg && msg.type === 'kfShowModal') showModal(msg.clicks);
     });
 
-    // Already over the limit? Show the reminder as soon as the page opens.
-    send({ type: 'liStatus' }).then((res) => {
-      if (res && res.overLimit) {
-        const show = () => showModal(res.clicks);
-        if (document.documentElement) show();
-        else document.addEventListener('DOMContentLoaded', show, { once: true });
-      }
-    });
+    // Opening or reloading a LinkedIn page counts as an action. If that reaches the
+    // limit (or you were already over it), the reminder shows right away.
+    // Pages Chrome pre-loads in the background only count once you actually open them.
+    const reportView = () =>
+      send({ type: 'liView' }).then((res) => {
+        if (res && res.showModal) showModal(res.clicks);
+      });
+    if (document.prerendering) {
+      document.addEventListener('prerenderingchange', reportView, { once: true });
+    } else {
+      reportView();
+    }
   }
 
   // ---------- modal ----------

@@ -3,7 +3,7 @@
 A tiny Chrome extension that keeps you off social media.
 
 - **Instant block:** Instagram, X and Twitter redirect to a calm screen that says "Focus on what matters. Get back to work."
-- **LinkedIn nudge:** after 3 clicks on LinkedIn, a reminder pops up with two buttons. **Close Tab** closes the tab. **I Need 1 More Minute** hides the reminder until you've clicked 3 more times.
+- **LinkedIn nudge:** after 3 actions on LinkedIn, a reminder pops up with two buttons. Clicks, opening a page, reloading and moving between pages all count, so typing URLs can't get around it. **Close Tab** closes the tab. **I Need 1 More Minute** hides the reminder until you've clicked 3 more times.
 - **Toolbar popup:** shows today's blocked visits (also shown as a badge on the icon) and your LinkedIn clicks.
 
 Built with plain HTML, CSS and JavaScript on Manifest V3. There's no build step and nothing is tracked or sent anywhere.

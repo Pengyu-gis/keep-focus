@@ -47,6 +47,32 @@ async function updateBadge() {
   await chrome.action.setBadgeText({ text: daily.blocked ? String(daily.blocked) : '' });
 }
 
+// ---------- LinkedIn counting ----------
+
+// Clicks AND page visits (open, reload, in-site navigation) count, so typing URLs
+// or reloading can't get around the limit. A click that leads to a new page, and
+// the page load + URL change of one navigation, are merged into a single count.
+const MERGE_MS = 3000;
+const lastCount = new Map(); // tabId -> time of last counted LinkedIn action
+
+async function countLinkedIn(tabId, kind) {
+  const li = await getLinkedInSession();
+  const now = Date.now();
+  const recent = tabId != null && now - (lastCount.get(tabId) || 0) < MERGE_MS;
+
+  if (kind === 'click' || !recent) {
+    li.clicks += 1;
+    await chrome.storage.session.set({ li });
+    const daily = await getDaily();
+    daily.linkedinClicks += 1;
+    await chrome.storage.local.set({ daily });
+  }
+  if (tabId != null) lastCount.set(tabId, now);
+  return { clicks: li.clicks, showModal: li.clicks >= li.nextAt };
+}
+
+const LINKEDIN_HOST = /(^|\.)linkedin\.com$/i;
+
 // ---------- message handlers ----------
 
 const handlers = {
@@ -61,15 +87,8 @@ const handlers = {
 
   // linkedin.js reports every real click on the page
   async liClick(msg, sender) {
-    const daily = await getDaily();
-    daily.linkedinClicks += 1;
-    await chrome.storage.local.set({ daily });
-
-    const li = await getLinkedInSession();
-    li.clicks += 1;
-    await chrome.storage.session.set({ li });
-
-    const showModal = li.clicks >= li.nextAt;
+    const { clicks, showModal } = await countLinkedIn(sender.tab && sender.tab.id, 'click');
+    const li = { clicks };
     // Click came from an embedded frame: ask the tab's top frame to show the modal.
     // The frame says itself whether it's on top. Chrome's frameId can't be trusted for
     // this: a page Chrome pre-loaded (e.g. a URL typed in the address bar) keeps a
@@ -83,10 +102,9 @@ const handlers = {
     return { clicks: li.clicks, showModal };
   },
 
-  // A LinkedIn page just opened: is the user already over the limit?
-  async liStatus() {
-    const li = await getLinkedInSession();
-    return { clicks: li.clicks, overLimit: li.clicks >= li.nextAt };
+  // A LinkedIn page was opened or reloaded (top frame only).
+  async liView(_msg, sender) {
+    return countLinkedIn(sender.tab && sender.tab.id, 'view');
   },
 
   // "I Need 1 More Minute" -> quiet until 3 more clicks
@@ -145,8 +163,20 @@ function isBlockedUrl(url) {
 // In-page navigation (X and Instagram are single-page apps) and pages served
 // from the site's own service worker never hit the network rule. Watch tab URLs too.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url && isBlockedUrl(changeInfo.url)) {
+  if (!changeInfo.url) return;
+  if (isBlockedUrl(changeInfo.url)) {
     chrome.tabs.update(tabId, { url: BLOCKED_PAGE }).catch(() => {});
+    return;
+  }
+  // Moving to another LinkedIn page (including in-site navigation) counts too.
+  let host = '';
+  try { host = new URL(changeInfo.url).hostname; } catch {}
+  if (LINKEDIN_HOST.test(host)) {
+    serial(() => countLinkedIn(tabId, 'nav')).then((res) => {
+      if (res && res.showModal) {
+        chrome.tabs.sendMessage(tabId, { type: 'kfShowModal', clicks: res.clicks }).catch(() => {});
+      }
+    });
   }
 });
 
