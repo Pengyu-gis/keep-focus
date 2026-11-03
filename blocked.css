@@ -1,0 +1,91 @@
+:root {
+  --bg: #0B0D12;
+  --text: #EEF1F7;
+  --muted: #8D96AD;
+  --accent: #6E8BFF;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background:
+    radial-gradient(60% 50% at 50% 40%, rgba(110, 139, 255, 0.10), transparent 70%),
+    var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  -webkit-font-smoothing: antialiased;
+}
+main {
+  text-align: center;
+  max-width: 520px;
+  animation: rise 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.breath {
+  width: 140px; height: 140px;
+  margin: 0 auto 40px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: radial-gradient(circle, rgba(110, 139, 255, 0.22), rgba(110, 139, 255, 0.02) 70%);
+  animation: breathe 8s ease-in-out infinite;
+}
+.core {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 40px rgba(110, 139, 255, 0.7);
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.sub {
+  margin: 0 0 8px;
+  font-size: clamp(17px, 2.6vw, 20px);
+  color: #C3CADB;
+}
+.hint {
+  margin: 0 0 36px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: 600 14px/1 inherit;
+  font-family: inherit;
+  padding: 13px 22px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+button:hover { background: rgba(255, 255, 255, 0.09); }
+button:active { transform: scale(0.98); }
+button:focus-visible { outline: 2px solid #9FB3FF; outline-offset: 2px; }
+
+.stat {
+  margin: 28px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.stat span { color: var(--accent); font-weight: 700; }
+.stat em { font-style: normal; }
+
+@keyframes breathe {
+  0%, 100% { transform: scale(0.85); opacity: 0.75; }
+  50%      { transform: scale(1.15); opacity: 1; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .breath, main { animation: none; }
+}

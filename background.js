@@ -1,0 +1,164 @@
+// Keep Focus — background service worker
+// Owns all counters so updates from many tabs never race each other.
+
+const CLICK_LIMIT = 3; // LinkedIn clicks before the reminder appears
+
+// ---------- helpers ----------
+
+function todayKey() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// Run storage updates one at a time (rapid clicks can arrive together).
+let queue = Promise.resolve();
+function serial(fn) {
+  const run = queue.then(fn, fn);
+  queue = run.catch(() => {});
+  return run;
+}
+
+// Daily stats live in local storage and reset when the date changes.
+async function getDaily() {
+  const { daily } = await chrome.storage.local.get('daily');
+  const today = todayKey();
+  if (!daily || daily.date !== today) {
+    const fresh = { date: today, blocked: 0, linkedinClicks: 0 };
+    await chrome.storage.local.set({ daily: fresh });
+    return fresh;
+  }
+  return daily;
+}
+
+// LinkedIn session state lives in session storage (clears when the browser restarts).
+async function getLinkedInSession() {
+  const { li } = await chrome.storage.session.get('li');
+  return li || { clicks: 0, nextAt: CLICK_LIMIT };
+}
+
+async function updateBadge() {
+  const daily = await getDaily();
+  await chrome.action.setBadgeBackgroundColor({ color: '#6E8BFF' });
+  if (chrome.action.setBadgeTextColor) {
+    await chrome.action.setBadgeTextColor({ color: '#FFFFFF' });
+  }
+  await chrome.action.setBadgeText({ text: daily.blocked ? String(daily.blocked) : '' });
+}
+
+// ---------- message handlers ----------
+
+const handlers = {
+  // blocked.html reports each time it is shown
+  async blockedVisit() {
+    const daily = await getDaily();
+    daily.blocked += 1;
+    await chrome.storage.local.set({ daily });
+    await updateBadge();
+    return { blocked: daily.blocked };
+  },
+
+  // linkedin.js reports every real click on the page
+  async liClick() {
+    const daily = await getDaily();
+    daily.linkedinClicks += 1;
+    await chrome.storage.local.set({ daily });
+
+    const li = await getLinkedInSession();
+    li.clicks += 1;
+    await chrome.storage.session.set({ li });
+
+    return { clicks: li.clicks, showModal: li.clicks >= li.nextAt };
+  },
+
+  // "I Need 1 More Minute" -> quiet until 3 more clicks
+  async liSnooze() {
+    const li = await getLinkedInSession();
+    li.nextAt = li.clicks + CLICK_LIMIT;
+    await chrome.storage.session.set({ li });
+    return { nextAt: li.nextAt };
+  },
+
+  // Pages can't close their own tab, so they ask us to.
+  async closeTab(_msg, sender) {
+    if (sender.tab && sender.tab.id != null) {
+      await chrome.tabs.remove(sender.tab.id);
+    }
+    return { ok: true };
+  },
+
+  async getStats() {
+    const daily = await getDaily();
+    const li = await getLinkedInSession();
+    return {
+      blocked: daily.blocked,
+      linkedinClicks: daily.linkedinClicks,
+      sessionClicks: li.clicks,
+      nextAt: li.nextAt,
+    };
+  },
+};
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const handler = handlers[msg && msg.type];
+  if (!handler) return false;
+  serial(() => handler(msg, sender))
+    .then(sendResponse)
+    .catch((err) => sendResponse({ error: String(err) }));
+  return true; // keep the channel open for the async reply
+});
+
+// ---------- catch what the network rule misses ----------
+
+const BLOCKED_HOST = /(^|\.)(instagram\.com|x\.com|twitter\.com)$/i;
+const BLOCKED_PATTERNS = ['*://*.instagram.com/*', '*://*.x.com/*', '*://*.twitter.com/*'];
+const LINKEDIN_PATTERNS = ['*://*.linkedin.com/*'];
+const BLOCKED_PAGE = chrome.runtime.getURL('blocked.html');
+
+function isBlockedUrl(url) {
+  try {
+    const u = new URL(url);
+    return /^https?:$/.test(u.protocol) && BLOCKED_HOST.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// In-page navigation (X and Instagram are single-page apps) and pages served
+// from the site's own service worker never hit the network rule. Watch tab URLs too.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url && isBlockedUrl(changeInfo.url)) {
+    chrome.tabs.update(tabId, { url: BLOCKED_PAGE }).catch(() => {});
+  }
+});
+
+// Tabs that were already open before install/startup are never re-checked by Chrome.
+async function sweepOpenTabs() {
+  const blocked = await chrome.tabs.query({ url: BLOCKED_PATTERNS });
+  for (const tab of blocked) {
+    chrome.tabs.update(tab.id, { url: BLOCKED_PAGE }).catch(() => {});
+  }
+  const linkedin = await chrome.tabs.query({ url: LINKEDIN_PATTERNS });
+  for (const tab of linkedin) {
+    chrome.scripting
+      .executeScript({ target: { tabId: tab.id }, files: ['linkedin.js'] })
+      .catch(() => {});
+  }
+}
+
+// ---------- lifecycle ----------
+
+function init() {
+  chrome.alarms.create('daily-check', { periodInMinutes: 10 });
+  serial(updateBadge);
+  sweepOpenTabs();
+}
+
+chrome.runtime.onInstalled.addListener(init);
+chrome.runtime.onStartup.addListener(init);
+
+// Keeps the badge honest after midnight.
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'daily-check') serial(updateBadge);
+});

@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "Keep Focus",
+  "version": "1.1.0",
+  "description": "Blocks Instagram and X, and nudges you off LinkedIn after a few clicks.",
+  "permissions": ["declarativeNetRequest", "storage", "alarms", "scripting"],
+  "host_permissions": [
+    "*://*.instagram.com/*",
+    "*://*.x.com/*",
+    "*://*.twitter.com/*",
+    "*://*.linkedin.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      { "id": "block_rules", "enabled": true, "path": "rules.json" }
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.instagram.com/*", "*://*.x.com/*", "*://*.twitter.com/*"],
+      "js": ["guard.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*.linkedin.com/*"],
+      "js": ["linkedin.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "blocked.css", "blocked.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "Keep Focus",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

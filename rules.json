@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": { "extensionPath": "/blocked.html" }
+    },
+    "condition": {
+      "requestDomains": ["instagram.com", "x.com", "twitter.com"],
+      "resourceTypes": ["main_frame"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "requestDomains": [
+        "instagram.com", "cdninstagram.com",
+        "x.com", "twitter.com", "twimg.com"
+      ],
+      "initiatorDomains": ["instagram.com", "x.com", "twitter.com"],
+      "resourceTypes": [
+        "sub_frame", "xmlhttprequest", "script", "stylesheet",
+        "image", "media", "font", "websocket", "other"
+      ]
+    }
+  }
+]

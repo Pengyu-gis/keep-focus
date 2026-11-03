@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon32.png" alt="" width="20" height="20">
+    <span>Keep Focus</span>
+  </header>
+
+  <section class="hero">
+    <div class="big" id="blocked">0</div>
+    <div class="label">blocked visits today</div>
+  </section>
+
+  <section class="rows">
+    <div class="row">
+      <span>LinkedIn clicks today</span>
+      <strong id="liToday">0</strong>
+    </div>
+    <div class="row">
+      <span>Next LinkedIn reminder</span>
+      <strong id="liNext">–</strong>
+    </div>
+  </section>
+
+  <section class="sites">
+    <div class="sites-title">Always blocked</div>
+    <div class="chips">
+      <span class="chip">instagram.com</span>
+      <span class="chip">x.com</span>
+      <span class="chip">twitter.com</span>
+    </div>
+  </section>
+
+  <footer>Counts reset at midnight</footer>
+  <script src="popup.js"></script>
+</body>
+</html>
